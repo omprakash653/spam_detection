@@ -1,97 +1,114 @@
 import streamlit as st
 import joblib
-import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 
-# ------------------ Page Config ------------------
+# ---------------- PAGE CONFIG ----------------
 st.set_page_config(
-    page_title="Spam Message Detector",
+    page_title="Spam Detector",
     page_icon="📩",
     layout="centered"
 )
 
-# ------------------ Load Model ------------------
+# ---------------- SESSION STATE ----------------
+if "history" not in st.session_state:
+    st.session_state.history = []
+
+# ---------------- SIDEBAR ----------------
+st.sidebar.title("⚙️ Settings")
+theme = st.sidebar.radio("Theme", ["Light", "Dark"])
+
+# ---------------- THEME ----------------
+if theme == "Dark":
+    st.markdown("""
+    <style>
+    .main { background-color: #0e1117; color: white; }
+    </style>
+    """, unsafe_allow_html=True)
+
+# ---------------- LOAD MODEL ----------------
 model = joblib.load("model.joblib")
 vectorizer = joblib.load("scaled.joblib")
 
-# ------------------ Custom CSS ------------------
-st.markdown("""
-<style>
-    .main {
-        background-color: #f9fafb;
-    }
-    .title {
-        text-align: center;
-        font-size: 40px;
-        font-weight: bold;
-    }
-    .subtitle {
-        text-align: center;
-        color: gray;
-        font-size: 16px;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-# ------------------ Title ------------------
-st.markdown("<div class='title'>📩 Spam Message Classifier</div>", unsafe_allow_html=True)
-st.markdown("<div class='subtitle'>Check whether a message is Spam or Ham using ML</div>", unsafe_allow_html=True)
-
+# ---------------- TITLE ----------------
+st.markdown("<h1 style='text-align:center'>📩 Spam Message Classifier</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center;color:gray'>Machine Learning based Spam Detection</p>", unsafe_allow_html=True)
 st.markdown("---")
 
-# ------------------ Input Section ------------------
+# ---------------- INPUT ----------------
 st.subheader("✍️ Enter Message")
 message = st.text_area(
-    "Type your message below:",
+    "",
     height=150,
-    placeholder="Congratulations! You won a free prize..."
+    placeholder="Congratulations! You have won a free gift..."
 )
 
-# ------------------ Prediction ------------------
+# ---------------- PREDICT ----------------
 if st.button("🔍 Predict", use_container_width=True):
     if message.strip() == "":
-        st.warning("⚠️ Please enter a message to classify.")
+        st.warning("⚠️ Please enter a message.")
     else:
-        # Transform input
-        X_input = vectorizer.transform([message])
+        X = vectorizer.transform([message])
+        prediction = model.predict(X)[0]
+        proba = model.predict_proba(X)[0]
 
-        # Prediction
-        prediction = model.predict(X_input)[0]
+        ham_prob = round(proba[0] * 100, 2)
+        spam_prob = round(proba[1] * 100, 2)
 
-        # Probability
-        proba = model.predict_proba(X_input)[0]
-        spam_prob = proba[1] * 100
-        ham_prob = proba[0] * 100
+        # Save history
+        st.session_state.history.append({
+            "Message": message,
+            "Prediction": prediction.upper(),
+            "Spam %": spam_prob,
+            "Ham %": ham_prob
+        })
 
         st.markdown("---")
 
-        # ------------------ Result ------------------
+        # ---------------- RESULT ----------------
         if prediction == "spam":
-            st.error(f"🚨 **SPAM DETECTED**")
+            st.error("🚨 **SPAM MESSAGE DETECTED**")
         else:
-            st.success(f"✅ **HAM (Not Spam)**")
+            st.success("✅ **HAM (NOT SPAM)**")
 
-        # ------------------ Probability Display ------------------
         col1, col2 = st.columns(2)
+        col1.metric("Spam Probability", f"{spam_prob}%")
+        col2.metric("Ham Probability", f"{ham_prob}%")
 
-        col1.metric("📌 Spam Probability", f"{spam_prob:.2f}%")
-        col2.metric("📌 Ham Probability", f"{ham_prob:.2f}%")
+        # ---------------- BAR CHART ----------------
+        st.subheader("📊 Confidence Bar Chart")
+        fig1, ax1 = plt.subplots()
+        ax1.bar(["Ham", "Spam"], [ham_prob, spam_prob])
+        ax1.set_ylim(0, 100)
+        ax1.set_ylabel("Probability (%)")
+        st.pyplot(fig1)
 
-        # ------------------ Bar Chart ------------------
-        st.subheader("📊 Prediction Confidence")
+        # ---------------- PIE CHART ----------------
+        st.subheader("🥧 Confidence Pie Chart")
+        fig2, ax2 = plt.subplots()
+        ax2.pie(
+            [ham_prob, spam_prob],
+            labels=["Ham", "Spam"],
+            autopct="%1.1f%%",
+            startangle=90
+        )
+        ax2.axis("equal")
+        st.pyplot(fig2)
 
-        labels = ['Ham', 'Spam']
-        values = [ham_prob, spam_prob]
-
-        fig, ax = plt.subplots()
-        ax.bar(labels, values)
-        ax.set_ylim(0, 100)
-        ax.set_ylabel("Probability (%)")
-        ax.set_title("Model Confidence")
-
-        st.pyplot(fig)
-
-# ------------------ Footer ------------------
+# ---------------- HISTORY ----------------
 st.markdown("---")
-st.caption("🚀 Built with Streamlit & Machine Learning")
-st.caption("© 2024 Spam Message Detector")
+st.subheader("🧾 Prediction History")
+
+if st.session_state.history:
+    df = pd.DataFrame(st.session_state.history)
+    st.dataframe(df, use_container_width=True)
+
+    if st.button("🗑️ Clear History"):
+        st.session_state.history = []
+        st.success("History cleared!")
+else:
+    st.info("No predictions yet.")
+
+# ---------------- FOOTER ----------------
+st.markdown("---")
+st.caption("🚀 Built with Streamlit | ML Spam Classifier")
